@@ -900,7 +900,7 @@ function renderProjectList() {
       </div>
       <button type="button" class="btn-sm" onclick="renameProject('${id}')">Rename</button>
       ${!active?`<button type="button" class="btn-sm" onclick="switchProject('${id}');renderProjectList()" style="border-color:var(--accent);color:var(--accent)">Open</button>`:''}
-      ${ids.length>1?`<button type="button" class="pdel" onclick="deleteProject('${id}')">✕</button>`:''}
+            <button type="button" class="pdel" onclick="deleteProject('${id}')">✕</button>
     </div>`;
   }).join('');
 }
@@ -914,14 +914,30 @@ function renameProject(id) {
 
 function deleteProject(id) {
   if (!confirm('Delete "'+projects[id].name+'" and all its manholes? This cannot be undone.')) return;
+
+  // Delete from server first
+  if (SYNC_SERVER) {
+    fetch(SYNC_SERVER + '/api/projects/' + id, { method: 'DELETE' }).catch(() => {});
+  }
+
   delete projects[id];
+  saveProjects();
+
   if (id === currentProjectId) {
-    currentProjectId = Object.keys(projects)[0];
-    manholes = projects[currentProjectId].manholes;
-    localStorage.setItem('mh_active_project', currentProjectId);
+    const remaining = Object.keys(projects);
+    if (remaining.length) {
+      currentProjectId = remaining[0];
+      manholes = projects[currentProjectId].manholes;
+      localStorage.setItem('mh_active_project', currentProjectId);
+    } else {
+      currentProjectId = null;
+      manholes = [];
+      localStorage.removeItem('mh_active_project');
+    }
     renderAll();
   }
-  saveProjects(); renderProjectSelect(); renderProjectList();
+
+  renderProjectSelect(); renderProjectList();
 }
 
 const STATE_PLANE_ZONES = [
