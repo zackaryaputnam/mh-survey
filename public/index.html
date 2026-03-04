@@ -1,0 +1,2056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>MH Survey — Manhole Field Collection</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #0f1117;
+    --bg-secondary: #1a1d27;
+    --bg-card: #222639;
+    --bg-hover: #2a2f45;
+    --accent: #f59e0b;
+    --accent-dim: #b45309;
+    --accent-glow: rgba(245, 158, 11, 0.15);
+    --text-primary: #e8eaf0;
+    --text-secondary: #8b91a8;
+    --text-muted: #565c73;
+    --border: #2e3348;
+    --success: #22c55e;
+    --danger: #ef4444;
+    --info: #3b82f6;
+    --radius: 10px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.3);
+    --canvas-bg: #181b24;
+    --canvas-shaft: rgba(86,92,115,0.12);
+    --canvas-shaft-stroke: #565c73;
+    --canvas-text: #8b91a8;
+    --canvas-dim-text: #e8eaf0;
+    --canvas-mh-fill: rgba(34,38,57,0.8);
+    --canvas-ref-line: rgba(139,145,168,0.2);
+  }
+
+  :root.light {
+    --bg-primary: #f0f1f5;
+    --bg-secondary: #ffffff;
+    --bg-card: #f7f8fa;
+    --bg-hover: #ecedf2;
+    --accent: #d97706;
+    --accent-dim: #92400e;
+    --accent-glow: rgba(217, 119, 6, 0.1);
+    --text-primary: #1a1d27;
+    --text-secondary: #4b5068;
+    --text-muted: #8b91a8;
+    --border: #d5d8e0;
+    --success: #16a34a;
+    --danger: #dc2626;
+    --info: #2563eb;
+    --shadow: 0 4px 24px rgba(0,0,0,0.08);
+    --canvas-bg: #f0f1f5;
+    --canvas-shaft: rgba(100,110,140,0.1);
+    --canvas-shaft-stroke: #9ca3b8;
+    --canvas-text: #4b5068;
+    --canvas-dim-text: #1a1d27;
+    --canvas-mh-fill: rgba(240,241,245,0.9);
+    --canvas-ref-line: rgba(100,110,140,0.15);
+  }
+
+  /* Theme toggle */
+  .theme-toggle {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .theme-toggle:hover { background: var(--bg-hover); border-color: var(--accent); }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  /* iOS touch fixes */
+  button, .btn, select, input, label, .mh-item, .theme-toggle {
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
+    cursor: pointer;
+  }
+
+  /* Mobile responsive */
+  @media (max-width: 768px) {
+    .main-layout { flex-direction: column; }
+    .sidebar { width: 100%; max-height: 35vh; border-right: none; border-bottom: 1px solid var(--border); }
+    .map-container { flex: 1; min-height: 40vh; }
+    .topbar { padding: 0 12px; gap: 6px; }
+    .topbar-brand span { display: none; }
+    .topbar-actions { gap: 4px; }
+    .topbar-actions .badge { display: none; }
+    .btn { padding: 8px 10px; font-size: 12px; }
+    .project-bar { padding: 6px 12px; }
+    .project-bar label { display: none; }
+    .modal { width: 95%; max-height: 90vh; }
+    .pipe-row { grid-template-columns: 30px 52px 46px 48px 72px 60px 26px; gap: 3px; }
+    .pipe-row-2 { grid-template-columns: 1fr 1fr; }
+    .pipe-row-2 .form-group:last-child { grid-column: 1 / -1; }
+  }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; height: 56px; background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 1000;
+  }
+  .topbar-brand { display: flex; align-items: center; gap: 10px; }
+  .topbar-brand .icon {
+    width: 32px; height: 32px; background: var(--accent); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: #000; font-weight: 700;
+  }
+  .topbar-brand h1 { font-size: 16px; font-weight: 700; letter-spacing: 0.5px; }
+  .topbar-brand span { font-size: 11px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px; }
+  .topbar-actions { display: flex; gap: 8px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px;
+    border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 13px;
+    font-weight: 600; cursor: pointer; border: 1px solid var(--border);
+    background: var(--bg-card); color: var(--text-primary); transition: all 0.15s;
+  }
+  .btn:hover { background: var(--bg-hover); border-color: var(--text-muted); }
+  .btn-accent { background: var(--accent); color: #000; border-color: var(--accent); }
+  .btn-accent:hover { background: #fbbf24; border-color: #fbbf24; }
+  .btn-danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+  .btn-danger:hover { background: rgba(239,68,68,0.1); }
+  .badge {
+    background: var(--accent-glow); color: var(--accent); padding: 2px 8px;
+    border-radius: 12px; font-size: 12px; font-weight: 600; font-family: 'JetBrains Mono', monospace;
+  }
+  .main-layout { display: flex; flex: 1; overflow: hidden; }
+  .sidebar {
+    width: 380px; background: var(--bg-secondary); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;
+  }
+  .sidebar-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+  .sidebar-header input {
+    flex: 1; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; color: var(--text-primary); font-family: 'DM Sans', sans-serif; font-size: 13px; outline: none;
+  }
+  .sidebar-header input::placeholder { color: var(--text-muted); }
+  .sidebar-header input:focus { border-color: var(--accent); }
+  .sidebar-list { flex: 1; overflow-y: auto; padding: 6px; }
+  .sidebar-list::-webkit-scrollbar { width: 6px; }
+  .sidebar-list::-webkit-scrollbar-track { background: transparent; }
+  .sidebar-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .mh-item {
+    padding: 10px 12px; border-radius: 8px; cursor: pointer;
+    border: 1px solid transparent; margin-bottom: 2px; transition: all 0.12s;
+  }
+  .mh-item:hover { background: var(--bg-card); }
+  .mh-item.active { background: var(--bg-card); border-color: var(--accent); }
+  .mh-item.surveyed { border-left: 3px solid var(--success); }
+  .mh-item-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+  .mh-item-id { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; color: var(--accent); }
+  .mh-item-status { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+  .mh-item-status.pending { color: var(--text-muted); }
+  .mh-item-status.complete { color: var(--success); }
+  .mh-item-coords { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted); }
+  .map-container { flex: 1; position: relative; }
+  #map { width: 100%; height: 100%; background: #e8e0d8; }
+  .leaflet-popup-content-wrapper { background: var(--bg-secondary) !important; color: var(--text-primary) !important; border-radius: 10px !important; border: 1px solid var(--border) !important; box-shadow: var(--shadow) !important; }
+  .leaflet-popup-tip { background: var(--bg-secondary) !important; }
+  .leaflet-popup-content { margin: 12px 14px !important; font-family: 'DM Sans', sans-serif !important; }
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+    z-index: 2000; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.15s;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .modal {
+    background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 16px;
+    width: 90%; max-width: 620px; max-height: 85vh; overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5); animation: slideUp 0.2s;
+  }
+  .modal::-webkit-scrollbar { width: 6px; }
+  .modal::-webkit-scrollbar-track { background: transparent; }
+  .modal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .modal-header {
+    padding: 20px 24px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    position: sticky; top: 0; background: var(--bg-secondary); z-index: 1;
+  }
+  .modal-header h2 { font-size: 18px; font-weight: 700; }
+  .modal-close {
+    width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal-close:hover { background: var(--bg-card); color: var(--text-primary); }
+  .modal-body { padding: 24px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label {
+    display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;
+  }
+  .form-group input, .form-group select, .form-group textarea {
+    width: 100%; padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text-primary); font-family: 'DM Sans', sans-serif;
+    font-size: 14px; outline: none; transition: border-color 0.15s;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--accent); }
+  .form-group textarea { resize: vertical; min-height: 80px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .modal-footer {
+    padding: 16px 24px; border-top: 1px solid var(--border); display: flex;
+    justify-content: flex-end; gap: 8px; position: sticky; bottom: 0; background: var(--bg-secondary);
+  }
+  .import-dropzone {
+    border: 2px dashed var(--border); border-radius: 12px; padding: 40px;
+    text-align: center; cursor: pointer; transition: all 0.15s; margin-bottom: 16px;
+  }
+  .import-dropzone:hover, .import-dropzone.dragover { border-color: var(--accent); background: var(--accent-glow); }
+  .import-dropzone .icon { font-size: 36px; margin-bottom: 12px; }
+  .import-dropzone p { color: var(--text-secondary); font-size: 14px; }
+  .import-dropzone .hint { color: var(--text-muted); font-size: 12px; margin-top: 6px; }
+  .column-mapping { background: var(--bg-card); border-radius: 10px; padding: 16px; margin-top: 16px; }
+  .column-mapping h4 { font-size: 13px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary); }
+  .mapping-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .mapping-row span { width: 120px; font-size: 12px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; }
+  .mapping-row select {
+    flex: 1; padding: 6px 10px; background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text-primary); font-family: 'DM Sans', sans-serif; font-size: 13px;
+  }
+  .stats-bar { display: flex; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--bg-secondary); }
+  .stat { font-size: 12px; color: var(--text-muted); }
+  .stat strong { color: var(--text-primary); font-family: 'JetBrains Mono', monospace; }
+  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 40px; }
+  .empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+  .empty-state h3 { font-size: 18px; margin-bottom: 8px; color: var(--text-secondary); }
+  .empty-state p { font-size: 14px; color: var(--text-muted); max-width: 300px; margin-bottom: 20px; }
+  .preview-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
+  .preview-table th { text-align: left; padding: 8px; background: var(--bg-card); color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; font-size: 11px; }
+  .preview-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-secondary); }
+  .zone-info { background: var(--bg-card); border-radius: 8px; padding: 12px; margin-top: 12px; font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
+  .zone-info .indicator { width: 8px; height: 8px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+
+  /* Section titles for the inspection form */
+  .form-section-title {
+    font-size: 13px; font-weight: 700; color: var(--accent); text-transform: uppercase;
+    letter-spacing: 1.5px; padding: 12px 0 8px 0; margin-top: 8px;
+    border-bottom: 1px solid var(--border); margin-bottom: 14px; display: flex; align-items: center;
+  }
+  /* Pipe connection rows */
+  .pipe-entry {
+    background: var(--bg-card);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border);
+    position: relative;
+  }
+  .pipe-row {
+    display: grid; grid-template-columns: 34px 58px 52px 54px 78px 68px 30px;
+    gap: 4px; align-items: end;
+  }
+  .pipe-row-2 {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px; align-items: end;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed var(--border);
+  }
+  .pipe-entry .form-group { margin-bottom: 0; }
+  .pipe-entry input, .pipe-entry select { padding: 6px 6px !important; font-size: 12px !important; }
+  .pipe-entry label { font-size: 9px !important; margin-bottom: 3px !important; letter-spacing: 0.5px !important; }
+  .pipe-entry .inv-calc {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--success);
+    background: rgba(34,197,94,0.08);
+    padding: 6px 6px;
+    border-radius: 6px;
+    text-align: center;
+    min-height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .pipe-remove {
+    width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--danger);
+    background: transparent; color: var(--danger); cursor: pointer; font-size: 13px;
+    display: flex; align-items: center; justify-content: center; margin-bottom: 2px;
+  }
+  .pipe-remove:hover { background: rgba(239,68,68,0.15); }
+
+  /* Compass Direction Picker */
+  .clock-btn {
+    width: 100%;
+    padding: 6px 6px !important;
+    font-size: 12px !important;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    text-align: center;
+    transition: border-color 0.15s;
+  }
+  .clock-btn:hover { border-color: var(--accent); }
+  .clock-btn.has-value { color: var(--accent); font-weight: 600; }
+
+  .clock-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(3px);
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.12s;
+  }
+
+  .clock-picker {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 28px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    animation: slideUp 0.2s;
+    text-align: center;
+  }
+
+  .clock-picker h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .clock-face {
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    position: relative;
+    margin: 0 auto 20px;
+  }
+
+  .clock-face .center-dot {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 12px; height: 12px;
+    background: var(--text-muted);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+  }
+
+  .clock-face .compass-n {
+    position: absolute;
+    top: -22px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 1px;
+  }
+
+  .clock-face .hour-btn {
+    position: absolute;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: translate(-50%, -50%);
+    transition: all 0.12s;
+    z-index: 2;
+  }
+
+  .clock-face .hour-btn:hover {
+    background: var(--accent-glow);
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: translate(-50%, -50%) scale(1.15);
+  }
+
+  .clock-face .hour-btn.selected {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #000;
+    transform: translate(-50%, -50%) scale(1.15);
+    box-shadow: 0 0 16px rgba(245, 158, 11, 0.4);
+  }
+
+  .clock-face .hand {
+    position: absolute;
+    bottom: 50%;
+    left: 50%;
+    width: 3px;
+    background: var(--accent);
+    transform-origin: bottom center;
+    border-radius: 2px;
+    z-index: 0;
+    transition: all 0.2s;
+    opacity: 0;
+  }
+  .clock-face .hand.visible { opacity: 1; }
+
+  .clock-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+  }
+
+  .compass-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 10px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .compass-status .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: background 0.3s;
+  }
+
+  .compass-heading-readout {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 14px;
+    letter-spacing: 1px;
+    min-height: 28px;
+  }
+
+  .compass-face-rotator {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0; left: 0;
+    transition: transform 0.08s linear;
+  }
+
+  /* Project bar */
+  .project-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .project-bar label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    white-space: nowrap;
+  }
+  .project-bar select {
+    flex: 1;
+    padding: 7px 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--accent);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    outline: none;
+  }
+  .project-bar select:focus { border-color: var(--accent); }
+  .project-bar .btn-sm {
+    padding: 6px 10px;
+    font-size: 11px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    touch-action: manipulation;
+    white-space: nowrap;
+  }
+  .project-bar .btn-sm:hover { background: var(--bg-hover); border-color: var(--accent); }
+
+  /* Project modal list */
+  .project-list-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    margin-bottom: 6px;
+    background: var(--bg-card);
+  }
+  .project-list-item .pname {
+    flex: 1;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .project-list-item .pmeta {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .project-list-item .pdel {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    border: 1px solid var(--danger);
+    background: transparent;
+    color: var(--danger);
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+    flex-shrink: 0;
+  }
+  .project-list-item .pdel:hover { background: rgba(239,68,68,0.1); }
+
+  /* Sync status indicator */
+  #syncBtn.syncing { opacity: 0.6; pointer-events: none; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .sync-spinning { display: inline-block; animation: spin 1s linear infinite; }
+
+  /* Sync config bar */
+  .sync-config {
+    background: var(--bg-card);
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .sync-config label { font-size: 11px; font-weight: 600; color: var(--text-secondary); white-space: nowrap; }
+  .sync-config input {
+    flex: 1; min-width: 180px;
+    padding: 7px 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+  .sync-config input:focus { border-color: var(--accent); outline: none; }
+  .sync-config .btn-sm {
+    padding: 7px 12px; font-size: 11px; border-radius: 6px;
+    border: 1px solid var(--accent); background: var(--accent);
+    color: #000; cursor: pointer; font-weight: 600; touch-action: manipulation;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand">
+    <div class="icon">MH</div>
+    <div><h1>MH Survey</h1><span>Field Collection</span></div>
+  </div>
+  <div class="topbar-actions">
+    <span class="badge" id="countBadge">0 manholes</span>
+    <button type="button" class="btn" onclick="openImport()">⬆ Import CSV</button>
+    <button type="button" class="btn" onclick="exportData()">⬇ Export</button>
+    <button type="button" class="btn" id="syncBtn" onclick="manualSync()" title="Sync with server">🔄 Sync</button>
+    <span id="syncStatus" title="Sync status" style="font-size:14px;cursor:help">⚫</span>
+    <button type="button" class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode">☀️</button>
+  </div>
+</div>
+
+<!-- PROJECT BAR -->
+<div class="project-bar">
+  <label>Project:</label>
+  <select id="projectSelect" onchange="switchProject(this.value)"></select>
+  <button type="button" class="btn-sm" onclick="promptNewProject()">+ New</button>
+  <button type="button" class="btn-sm" onclick="openProjectManager()">Manage</button>
+</div>
+
+<div class="main-layout">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <input type="text" id="searchInput" placeholder="Search manholes..." oninput="filterList()">
+    </div>
+    <div class="stats-bar">
+      <div class="stat">Total: <strong id="statTotal">0</strong></div>
+      <div class="stat">Surveyed: <strong id="statSurveyed">0</strong></div>
+      <div class="stat">Pending: <strong id="statPending">0</strong></div>
+    </div>
+    <div class="sidebar-list" id="sidebarList">
+      <div class="empty-state">
+        <div class="icon">🕳️</div>
+        <h3>No Manholes Yet</h3>
+        <p>Import a CSV file with manhole locations to get started</p>
+        <button type="button" class="btn btn-accent" onclick="openImport()">⬆ Import CSV</button>
+      </div>
+    </div>
+  </div>
+  <div class="map-container"><div id="map"></div></div>
+</div>
+
+<!-- IMPORT MODAL -->
+<div class="overlay" id="importModal" style="display:none">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <h2>Import Manhole Locations</h2>
+      <button type="button" class="modal-close" onclick="closeImport()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>State Plane Coordinate System Zone</label>
+        <select id="zoneSelect" onchange="updateZoneInfo()"><option value="">— Select your state plane zone —</option></select>
+        <div class="zone-info" id="zoneInfo" style="display:none"><div class="indicator"></div><span id="zoneInfoText"></span></div>
+      </div>
+      <div class="form-group">
+        <label>Units</label>
+        <select id="unitSelect"><option value="feet">US Survey Feet</option><option value="meters">Meters</option></select>
+      </div>
+      <label for="fileInput" class="import-dropzone" id="dropzone"
+           ondragover="event.preventDefault(); this.classList.add('dragover')"
+           ondragleave="this.classList.remove('dragover')" ondrop="handleDrop(event)">
+        <div class="icon">📄</div>
+        <p id="dropzoneText">Tap here to select CSV file</p>
+        <div class="hint">CSV with columns for ID, Easting/X, Northing/Y, and optionally Elevation</div>
+      </label>
+      <input type="file" id="fileInput" accept=".csv,.txt,.CSV,.TXT" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip:rect(0,0,0,0)" onchange="handleFile(this.files[0])">
+      <div id="mappingSection" style="display:none">
+        <div class="column-mapping">
+          <h4>Map Your Columns</h4>
+          <div class="mapping-row"><span>Manhole ID</span><select id="mapId"></select></div>
+          <div class="mapping-row"><span>Easting (X)</span><select id="mapEasting"></select></div>
+          <div class="mapping-row"><span>Northing (Y)</span><select id="mapNorthing"></select></div>
+          <div class="mapping-row"><span>Elevation</span><select id="mapElev"></select></div>
+        </div>
+        <table class="preview-table" id="previewTable"></table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn" onclick="closeImport()">Cancel</button>
+      <button type="button" class="btn btn-accent" id="importBtn" onclick="doImport()" disabled>Import Manholes</button>
+    </div>
+  </div>
+</div>
+
+<!-- SURVEY / INSPECTION MODAL -->
+<div class="overlay" id="surveyModal" style="display:none">
+  <div class="modal" style="max-width:720px">
+    <div class="modal-header">
+      <h2 id="surveyTitle">Manhole Inspection</h2>
+      <button type="button" class="modal-close" onclick="closeSurvey()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-section-title">Manhole Cover Details</div>
+      <div class="form-row-3">
+        <div class="form-group"><label>Location</label>
+          <select id="fLocation"><option value="">—</option><option>Intersection</option><option>Roadway</option><option>Curb</option><option>Sidewalk</option><option>Easement</option><option>Yard</option><option>Other</option></select>
+        </div>
+        <div class="form-group"><label>Traffic</label>
+          <select id="fTraffic"><option value="">—</option><option>Heavy</option><option>Moderate</option><option>Light</option></select>
+        </div>
+        <div class="form-group"><label>Cover Shape</label>
+          <select id="fCoverShape"><option value="">—</option><option>Round</option><option>Square</option><option>Rectangular</option></select>
+        </div>
+      </div>
+      <div class="form-row-3">
+        <div class="form-group"><label>Cover Diameter / Dims</label><input type="text" id="fCoverDiam" placeholder='24" or 24x36'></div>
+        <div class="form-group"><label>Cover Material</label>
+          <select id="fCoverMaterial"><option value="">—</option><option>Iron</option><option>Steel</option><option>Concrete</option><option>Composite</option><option>Other</option></select>
+        </div>
+        <div class="form-group"><label>Cover Condition</label>
+          <select id="fCoverCond"><option value="">—</option><option>Good</option><option>Fair</option><option>Poor</option><option>Replace</option></select>
+        </div>
+      </div>
+
+      <div class="form-section-title">Pipe Connections <button type="button" class="btn" style="padding:4px 10px;font-size:11px;margin-left:auto" onclick="addPipe()">+ Add Pipe</button></div>
+      <div id="pipeContainer"><div style="font-size:12px;color:var(--text-muted);padding:8px 0">No pipes added yet.</div></div>
+
+      <div class="form-section-title">Elevations &amp; Ratings</div>
+      <div class="form-row-3">
+        <div class="form-group"><label>Rim Elevation (from survey data)</label><input type="number" step="0.01" id="fRimElev" placeholder="—" readonly style="background:var(--bg-primary);color:var(--accent);font-weight:600" oninput="renderPipes()"></div>
+        <div class="form-group"><label>Overall Structural Rating</label>
+          <select id="fStructRating"><option value="">—</option><option>1 - Excellent</option><option>2 - Good</option><option>3 - Fair</option><option>4 - Poor</option><option>5 - Failed</option></select>
+        </div>
+        <div class="form-group"><label>Overall Condition Rating</label>
+          <select id="fCondRating"><option value="">—</option><option>1 - Excellent</option><option>2 - Good</option><option>3 - Fair</option><option>4 - Poor</option><option>5 - Failed</option></select>
+        </div>
+      </div>
+      <div class="form-group"><label>Recommended Action</label>
+        <select id="fAction"><option value="">—</option><option>None</option><option>Monitor</option><option>Repair</option><option>Rehabilitation</option><option>Replacement</option></select>
+      </div>
+
+      <div class="form-section-title">Manhole Diagram</div>
+      <div id="mhDiagramWrap" style="background:var(--bg-card);border-radius:10px;padding:12px;margin-bottom:16px;text-align:center;position:relative;">
+        <canvas id="mhDiagramCanvas" width="560" height="560" style="width:100%;max-width:560px;border-radius:8px;background:var(--canvas-bg);"></canvas>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">Auto-generated from pipe data • Plan view (top) &amp; Profile view (bottom)</div>
+      </div>
+
+      <div class="form-section-title">Notes / Sketch</div>
+      <div class="form-group">
+        <textarea id="fNotes" placeholder="Field observations, defects, debris, access issues, sketch description..." style="min-height:100px"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-danger" onclick="clearSurvey()" id="clearSurveyBtn" style="margin-right:auto;display:none">Clear</button>
+      <button type="button" class="btn" onclick="closeSurvey()">Cancel</button>
+      <button type="button" class="btn btn-accent" onclick="saveSurvey()">Save Inspection</button>
+    </div>
+  </div>
+</div>
+
+<!-- PROJECT MANAGER MODAL -->
+<div class="overlay" id="projectModal" style="display:none">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-header">
+      <h2>Manage Projects</h2>
+      <button type="button" class="modal-close" onclick="closeProjectManager()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="projectList"></div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+        <div class="form-group">
+          <label>Create New Project</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="newProjectName" placeholder="Project name..." style="flex:1">
+            <button type="button" class="btn btn-accent" onclick="createProjectFromManager()">Create</button>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+        <div class="form-group">
+          <label>Server Sync</label>
+          <div class="sync-config">
+            <label>URL:</label>
+            <input type="text" id="syncServerUrl" placeholder="http://yourserver:3000" value="">
+            <button type="button" class="btn-sm" onclick="saveSyncUrl()">Save & Test</button>
+          </div>
+          <div id="syncTestResult" style="font-size:11px;color:var(--text-muted);margin-top:6px;padding:0 4px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let manholes = [];
+let csvData = null;
+let csvHeaders = [];
+let selectedId = null;
+let map, markersGroup;
+let pipes = [];
+
+// ================ PROJECTS ================
+let projects = {};
+let currentProjectId = null;
+
+function genId() { return 'p' + Date.now() + Math.random().toString(36).slice(2,6); }
+
+function loadProjects() {
+  const saved = localStorage.getItem('mh_projects');
+  if (saved) { try { projects = JSON.parse(saved); } catch(e) { projects = {}; } }
+  // Migrate old single-project data
+  if (!Object.keys(projects).length) {
+    const old = localStorage.getItem('mh_survey_data');
+    if (old) {
+      try {
+        const arr = JSON.parse(old);
+        if (arr.length) {
+          const id = genId();
+          projects[id] = { name:'My Project', manholes:arr, created:new Date().toISOString() };
+          saveProjects();
+          localStorage.removeItem('mh_survey_data');
+        }
+      } catch(e) {}
+    }
+  }
+  if (!Object.keys(projects).length) {
+    const id = genId();
+    projects[id] = { name:'My Project', manholes:[], created:new Date().toISOString() };
+    saveProjects();
+  }
+  const last = localStorage.getItem('mh_active_project');
+  currentProjectId = (last && projects[last]) ? last : Object.keys(projects)[0];
+  manholes = projects[currentProjectId].manholes;
+  renderProjectSelect();
+}
+
+function saveProjects() { localStorage.setItem('mh_projects', JSON.stringify(projects)); }
+
+function save() {
+  if (currentProjectId && projects[currentProjectId]) {
+    projects[currentProjectId].manholes = manholes;
+    saveProjects();
+  }
+}
+
+function renderProjectSelect() {
+  const sel = document.getElementById('projectSelect');
+  sel.innerHTML = '';
+  Object.keys(projects).forEach(id => {
+    const o = document.createElement('option');
+    o.value = id; o.textContent = projects[id].name;
+    if (id === currentProjectId) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+function switchProject(id) {
+  if (!projects[id]) return;
+  if (currentProjectId && projects[currentProjectId]) projects[currentProjectId].manholes = manholes;
+  currentProjectId = id;
+  manholes = projects[id].manholes;
+  localStorage.setItem('mh_active_project', id);
+  saveProjects();
+  selectedId = null;
+  renderAll();
+  renderProjectSelect();
+}
+
+function promptNewProject() {
+  const name = prompt('New project name:');
+  if (!name || !name.trim()) return;
+  createProject(name.trim());
+}
+
+function createProject(name) {
+  const id = genId();
+  projects[id] = { name, manholes:[], created:new Date().toISOString() };
+  saveProjects();
+  switchProject(id);
+}
+
+function createProjectFromManager() {
+  const inp = document.getElementById('newProjectName');
+  const name = inp.value.trim();
+  if (!name) return;
+  createProject(name);
+  inp.value = '';
+  renderProjectList();
+}
+
+function openProjectManager() {
+  document.getElementById('projectModal').style.display = 'flex';
+  renderProjectList();
+}
+function closeProjectManager() { document.getElementById('projectModal').style.display = 'none'; }
+
+function renderProjectList() {
+  const c = document.getElementById('projectList');
+  const ids = Object.keys(projects);
+  c.innerHTML = ids.map(id => {
+    const p = projects[id];
+    const cnt = p.manholes.length;
+    const surv = p.manholes.filter(m => m.survey).length;
+    const active = id === currentProjectId;
+    return `<div class="project-list-item" style="${active?'border-color:var(--accent)':''}">
+      <div style="flex:1">
+        <div class="pname" style="${active?'color:var(--accent)':''}">${p.name}${active?' (active)':''}</div>
+        <div class="pmeta">${cnt} MH · ${surv} surveyed · ${new Date(p.created).toLocaleDateString()}</div>
+      </div>
+      <button type="button" class="btn-sm" onclick="renameProject('${id}')">Rename</button>
+      ${!active?`<button type="button" class="btn-sm" onclick="switchProject('${id}');renderProjectList()" style="border-color:var(--accent);color:var(--accent)">Open</button>`:''}
+      ${ids.length>1?`<button type="button" class="pdel" onclick="deleteProject('${id}')">✕</button>`:''}
+    </div>`;
+  }).join('');
+}
+
+function renameProject(id) {
+  const name = prompt('Rename project:', projects[id].name);
+  if (!name || !name.trim()) return;
+  projects[id].name = name.trim();
+  saveProjects(); renderProjectSelect(); renderProjectList();
+}
+
+function deleteProject(id) {
+  if (!confirm('Delete "'+projects[id].name+'" and all its manholes? This cannot be undone.')) return;
+  delete projects[id];
+  if (id === currentProjectId) {
+    currentProjectId = Object.keys(projects)[0];
+    manholes = projects[currentProjectId].manholes;
+    localStorage.setItem('mh_active_project', currentProjectId);
+    renderAll();
+  }
+  saveProjects(); renderProjectSelect(); renderProjectList();
+}
+
+const STATE_PLANE_ZONES = [
+  { name: "Alabama East (0101)", epsg: "EPSG:26929", proj: "+proj=tmerc +lat_0=30.5 +lon_0=-85.83333333333333 +k=0.99996 +x_0=200000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Alabama West (0102)", epsg: "EPSG:26930", proj: "+proj=tmerc +lat_0=30 +lon_0=-87.5 +k=0.999933333 +x_0=600000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Arizona Central (0202)", epsg: "EPSG:26949", proj: "+proj=tmerc +lat_0=31 +lon_0=-111.9166666666667 +k=0.9999 +x_0=213360 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "California Zone 3 (0403)", epsg: "EPSG:26943", proj: "+proj=lcc +lat_1=38.43333333333333 +lat_2=37.06666666666667 +lat_0=36.5 +lon_0=-120.5 +x_0=2000000 +y_0=500000 +datum=NAD83 +units=m" },
+  { name: "California Zone 5 (0405)", epsg: "EPSG:26945", proj: "+proj=lcc +lat_1=35.46666666666667 +lat_2=34.03333333333333 +lat_0=33.5 +lon_0=-118 +x_0=2000000 +y_0=500000 +datum=NAD83 +units=m" },
+  { name: "California Zone 6 (0406)", epsg: "EPSG:26946", proj: "+proj=lcc +lat_1=33.88333333333333 +lat_2=32.78333333333333 +lat_0=32.16666666666666 +lon_0=-116.25 +x_0=2000000 +y_0=500000 +datum=NAD83 +units=m" },
+  { name: "Colorado Central (0502)", epsg: "EPSG:26954", proj: "+proj=lcc +lat_1=39.75 +lat_2=38.45 +lat_0=37.83333333333334 +lon_0=-105.5 +x_0=914401.8289 +y_0=304800.6096 +datum=NAD83 +units=m" },
+  { name: "Connecticut (0600)", epsg: "EPSG:26956", proj: "+proj=lcc +lat_1=41.86666666666667 +lat_2=41.2 +lat_0=40.83333333333334 +lon_0=-72.75 +x_0=304800.6096 +y_0=152400.3048 +datum=NAD83 +units=m" },
+  { name: "Florida East (0901)", epsg: "EPSG:26958", proj: "+proj=tmerc +lat_0=24.33333333333333 +lon_0=-81 +k=0.999941177 +x_0=200000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Florida North (0903)", epsg: "EPSG:26960", proj: "+proj=lcc +lat_1=30.75 +lat_2=29.58333333333333 +lat_0=29 +lon_0=-84.5 +x_0=600000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Florida West (0902)", epsg: "EPSG:26959", proj: "+proj=tmerc +lat_0=24.33333333333333 +lon_0=-82 +k=0.999941177 +x_0=200000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Georgia East (1001)", epsg: "EPSG:26966", proj: "+proj=tmerc +lat_0=30 +lon_0=-82.16666666666667 +k=0.9999 +x_0=200000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Georgia West (1002)", epsg: "EPSG:26967", proj: "+proj=tmerc +lat_0=30 +lon_0=-84.16666666666667 +k=0.9999 +x_0=700000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Illinois East (1201)", epsg: "EPSG:26971", proj: "+proj=tmerc +lat_0=36.66666666666666 +lon_0=-88.33333333333333 +k=0.999975 +x_0=300000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Illinois West (1202)", epsg: "EPSG:26972", proj: "+proj=tmerc +lat_0=36.66666666666666 +lon_0=-90.16666666666667 +k=0.999941177 +x_0=700000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Indiana East (1301)", epsg: "EPSG:26973", proj: "+proj=tmerc +lat_0=37.5 +lon_0=-85.66666666666667 +k=0.999966667 +x_0=100000 +y_0=250000 +datum=NAD83 +units=m" },
+  { name: "Indiana West (1302)", epsg: "EPSG:26974", proj: "+proj=tmerc +lat_0=37.5 +lon_0=-87.08333333333333 +k=0.999966667 +x_0=900000 +y_0=250000 +datum=NAD83 +units=m" },
+  { name: "Louisiana North (1701)", epsg: "EPSG:26981", proj: "+proj=lcc +lat_1=32.66666666666666 +lat_2=31.16666666666667 +lat_0=30.5 +lon_0=-92.5 +x_0=1000000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Louisiana South (1702)", epsg: "EPSG:26982", proj: "+proj=lcc +lat_1=30.7 +lat_2=29.3 +lat_0=28.5 +lon_0=-91.33333333333333 +x_0=1000000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Maryland (1900)", epsg: "EPSG:26985", proj: "+proj=lcc +lat_1=39.45 +lat_2=38.3 +lat_0=37.66666666666666 +lon_0=-77 +x_0=400000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Massachusetts Mainland (2001)", epsg: "EPSG:26986", proj: "+proj=lcc +lat_1=42.68333333333333 +lat_2=41.71666666666667 +lat_0=41 +lon_0=-71.5 +x_0=200000 +y_0=750000 +datum=NAD83 +units=m" },
+  { name: "Michigan South (2113)", epsg: "EPSG:26990", proj: "+proj=lcc +lat_1=43.66666666666666 +lat_2=42.1 +lat_0=41.5 +lon_0=-84.36666666666666 +x_0=4000000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Minnesota South (2203)", epsg: "EPSG:26993", proj: "+proj=lcc +lat_1=45.21666666666667 +lat_2=43.78333333333333 +lat_0=43 +lon_0=-94 +x_0=800000 +y_0=100000 +datum=NAD83 +units=m" },
+  { name: "New Jersey (2900)", epsg: "EPSG:26918", proj: "+proj=tmerc +lat_0=38.83333333333334 +lon_0=-74.5 +k=0.9999 +x_0=150000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "New York Long Island (3104)", epsg: "EPSG:32118", proj: "+proj=lcc +lat_1=41.03333333333333 +lat_2=40.66666666666666 +lat_0=40.16666666666666 +lon_0=-74 +x_0=300000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "New York Central (3102)", epsg: "EPSG:32116", proj: "+proj=tmerc +lat_0=40 +lon_0=-76.58333333333333 +k=0.9999375 +x_0=250000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "North Carolina (3200)", epsg: "EPSG:32119", proj: "+proj=lcc +lat_1=36.16666666666666 +lat_2=34.33333333333334 +lat_0=33.75 +lon_0=-79 +x_0=609601.22 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Ohio North (3401)", epsg: "EPSG:32122", proj: "+proj=lcc +lat_1=41.7 +lat_2=40.43333333333333 +lat_0=39.66666666666666 +lon_0=-82.5 +x_0=600000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Ohio South (3402)", epsg: "EPSG:32123", proj: "+proj=lcc +lat_1=40.03333333333333 +lat_2=38.73333333333333 +lat_0=38 +lon_0=-82.5 +x_0=600000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Pennsylvania North (3701)", epsg: "EPSG:32128", proj: "+proj=lcc +lat_1=41.95 +lat_2=40.88333333333333 +lat_0=40.16666666666666 +lon_0=-77.75 +x_0=600000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Pennsylvania South (3702)", epsg: "EPSG:32129", proj: "+proj=lcc +lat_1=40.96666666666667 +lat_2=39.93333333333333 +lat_0=39.33333333333334 +lon_0=-77.75 +x_0=600000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Tennessee (4100)", epsg: "EPSG:32136", proj: "+proj=lcc +lat_1=36.41666666666666 +lat_2=35.25 +lat_0=34.33333333333334 +lon_0=-86 +x_0=600000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Texas Central (4203)", epsg: "EPSG:32139", proj: "+proj=lcc +lat_1=31.88333333333333 +lat_2=30.11666666666667 +lat_0=29.66666666666667 +lon_0=-100.3333333333333 +x_0=700000 +y_0=3000000 +datum=NAD83 +units=m" },
+  { name: "Texas North Central (4202)", epsg: "EPSG:32138", proj: "+proj=lcc +lat_1=33.96666666666667 +lat_2=32.13333333333333 +lat_0=31.66666666666667 +lon_0=-98.5 +x_0=600000 +y_0=2000000 +datum=NAD83 +units=m" },
+  { name: "Texas South Central (4204)", epsg: "EPSG:32140", proj: "+proj=lcc +lat_1=30.28333333333333 +lat_2=28.38333333333333 +lat_0=27.83333333333333 +lon_0=-99 +x_0=600000 +y_0=4000000 +datum=NAD83 +units=m" },
+  { name: "Virginia North (4501)", epsg: "EPSG:32146", proj: "+proj=lcc +lat_1=39.2 +lat_2=38.03333333333333 +lat_0=37.66666666666666 +lon_0=-78.5 +x_0=3500000 +y_0=2000000 +datum=NAD83 +units=m" },
+  { name: "Virginia South (4502)", epsg: "EPSG:32147", proj: "+proj=lcc +lat_1=37.96666666666667 +lat_2=36.76666666666667 +lat_0=36.33333333333334 +lon_0=-78.5 +x_0=3500000 +y_0=1000000 +datum=NAD83 +units=m" },
+  { name: "Washington North (4601)", epsg: "EPSG:32148", proj: "+proj=lcc +lat_1=48.73333333333333 +lat_2=47.5 +lat_0=47 +lon_0=-120.8333333333333 +x_0=500000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Washington South (4602)", epsg: "EPSG:32149", proj: "+proj=lcc +lat_1=47.33333333333334 +lat_2=45.83333333333334 +lat_0=45.33333333333334 +lon_0=-120.5 +x_0=500000 +y_0=0 +datum=NAD83 +units=m" },
+  { name: "Wisconsin South (4803)", epsg: "EPSG:32154", proj: "+proj=lcc +lat_1=44.06666666666667 +lat_2=42.73333333333333 +lat_0=42 +lon_0=-90 +x_0=600000 +y_0=0 +datum=NAD83 +units=m" },
+];
+
+// ================ INIT ================
+function init() {
+  const sel = document.getElementById('zoneSelect');
+  STATE_PLANE_ZONES.forEach((z, i) => {
+    const opt = document.createElement('option');
+    opt.value = i; opt.textContent = z.name; sel.appendChild(opt);
+  });
+  map = L.map('map', { zoomControl: true }).setView([39.8, -98.5], 5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19
+  }).addTo(map);
+  markersGroup = L.layerGroup().addTo(map);
+  loadProjects();
+  renderAll();
+}
+
+function save() {
+  if (currentProjectId && projects[currentProjectId]) {
+    projects[currentProjectId].manholes = manholes;
+    saveProjects();
+  }
+}
+function updateZoneInfo() {
+  const idx = document.getElementById('zoneSelect').value;
+  const info = document.getElementById('zoneInfo');
+  if (idx === '') { info.style.display = 'none'; return; }
+  document.getElementById('zoneInfoText').textContent = `${STATE_PLANE_ZONES[idx].name} — ${STATE_PLANE_ZONES[idx].epsg}`;
+  info.style.display = 'flex';
+}
+
+// ================ IMPORT ================
+function openImport() {
+  document.getElementById('importModal').style.display = 'flex';
+  csvData = null; csvHeaders = [];
+  document.getElementById('mappingSection').style.display = 'none';
+  document.getElementById('importBtn').disabled = true;
+  document.getElementById('dropzoneText').textContent = 'Tap here to select CSV file';
+  // Reset file input so same file can be re-selected
+  document.getElementById('fileInput').value = '';
+}
+function closeImport() { document.getElementById('importModal').style.display = 'none'; }
+function handleDrop(e) {
+  e.preventDefault(); e.target.closest('.import-dropzone').classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+}
+function handleFile(file) {
+  if (!file) return;
+  document.getElementById('dropzoneText').textContent = `✓ ${file.name}`;
+  Papa.parse(file, { header: true, skipEmptyLines: true, complete: function(r) { csvData = r.data; csvHeaders = r.meta.fields || []; showColumnMapping(); } });
+}
+function showColumnMapping() {
+  document.getElementById('mappingSection').style.display = 'block';
+  const selectors = ['mapId','mapEasting','mapNorthing','mapElev'];
+  const guess = { mapId: /^(id|mh[-_]?id|manhole[-_]?id|asset[-_]?id|name|label|point[-_]?id|fid)/i, mapEasting: /^(easting|x|east|x[-_]?coord)/i, mapNorthing: /^(northing|y|north|y[-_]?coord)/i, mapElev: /^(elev|elevation|z|height|rim)/i };
+  selectors.forEach(selId => {
+    const sel = document.getElementById(selId);
+    sel.innerHTML = '<option value="">— Select —</option>';
+    csvHeaders.forEach(h => { const o = document.createElement('option'); o.value = h; o.textContent = h; sel.appendChild(o); });
+    for (const h of csvHeaders) { if (guess[selId] && guess[selId].test(h.trim())) { sel.value = h; break; } }
+  });
+  const table = document.getElementById('previewTable');
+  let html = '<tr>'; csvHeaders.forEach(h => html += `<th>${h}</th>`); html += '</tr>';
+  csvData.slice(0,5).forEach(row => { html += '<tr>'; csvHeaders.forEach(h => html += `<td>${row[h]||''}</td>`); html += '</tr>'; });
+  table.innerHTML = html;
+  document.getElementById('importBtn').disabled = false;
+}
+function doImport() {
+  const zoneIdx = document.getElementById('zoneSelect').value;
+  if (zoneIdx === '') { alert('Please select a State Plane zone.'); return; }
+  const zone = STATE_PLANE_ZONES[zoneIdx];
+  const units = document.getElementById('unitSelect').value;
+  const colId = document.getElementById('mapId').value;
+  const colE = document.getElementById('mapEasting').value;
+  const colN = document.getElementById('mapNorthing').value;
+  const colZ = document.getElementById('mapElev').value;
+  if (!colId || !colE || !colN) { alert('Please map at least ID, Easting, and Northing.'); return; }
+  proj4.defs(zone.epsg, zone.proj);
+  const ftToM = 0.3048006096012192;
+  let imported = 0;
+  csvData.forEach(row => {
+    let easting = parseFloat(row[colE]), northing = parseFloat(row[colN]);
+    if (isNaN(easting) || isNaN(northing)) return;
+    if (units === 'feet') { easting *= ftToM; northing *= ftToM; }
+    const [lng, lat] = proj4(zone.epsg, 'EPSG:4326', [easting, northing]);
+    const mh = {
+      id: (row[colId] || `MH-${imported+1}`).toString().trim(),
+      easting: parseFloat(row[colE]), northing: parseFloat(row[colN]),
+      elevation: colZ ? parseFloat(row[colZ]) || null : null,
+      lat, lng, zone: zone.name, survey: null, originalData: { ...row }
+    };
+    if (!manholes.find(m => m.id === mh.id)) { manholes.push(mh); imported++; }
+  });
+  save(); renderAll(); closeImport();
+  alert(`Imported ${imported} manholes.`);
+}
+
+// ================ RENDER ================
+function renderAll() { renderList(); renderMap(); updateStats(); }
+function updateStats() {
+  const t = manholes.length, s = manholes.filter(m => m.survey).length;
+  document.getElementById('statTotal').textContent = t;
+  document.getElementById('statSurveyed').textContent = s;
+  document.getElementById('statPending').textContent = t - s;
+  document.getElementById('countBadge').textContent = `${t} manhole${t!==1?'s':''}`;
+}
+function renderList() {
+  const c = document.getElementById('sidebarList');
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  if (!manholes.length) { c.innerHTML = `<div class="empty-state"><div class="icon">🕳️</div><h3>No Manholes Yet</h3><p>Import a CSV file with manhole locations to get started</p><button type="button" class="btn btn-accent" onclick="openImport()">⬆ Import CSV</button></div>`; return; }
+  const filtered = manholes.filter(m => m.id.toLowerCase().includes(q));
+  c.innerHTML = filtered.map(m => {
+    const hasPipes = m.survey && m.survey.pipes && m.survey.pipes.length;
+    const canvasId = 'sidebarDiag_' + m.id.replace(/[^a-zA-Z0-9]/g, '_');
+    return `<div class="mh-item ${m.survey?'surveyed':''} ${selectedId===m.id?'active':''}" onclick="selectManhole('${m.id}')">
+      <div class="mh-item-top"><span class="mh-item-id">${m.id}</span><span class="mh-item-status ${m.survey?'complete':'pending'}">${m.survey?'✓ Surveyed':'Pending'}</span></div>
+      <div class="mh-item-coords">E: ${m.easting.toFixed(2)} &nbsp; N: ${m.northing.toFixed(2)}${m.elevation!=null?` &nbsp; Z: ${m.elevation.toFixed(2)}`:''}</div>
+      ${hasPipes ? `<canvas id="${canvasId}" width="140" height="140" style="width:70px;height:70px;display:block;margin:6px auto 0;border-radius:6px;background:var(--canvas-bg);"></canvas>` : ''}
+    </div>`;
+  }).join('');
+  // Draw mini diagrams for sidebar items
+  filtered.forEach(m => {
+    if (m.survey && m.survey.pipes && m.survey.pipes.length) {
+      const canvasId = 'sidebarDiag_' + m.id.replace(/[^a-zA-Z0-9]/g, '_');
+      setTimeout(() => drawMiniPlanView(canvasId, m), 10);
+    }
+  });
+}
+function filterList() { renderList(); }
+function renderMap() {
+  markersGroup.clearLayers();
+  manholes.forEach(m => {
+    const color = m.survey ? '#22c55e' : '#f59e0b';
+    const icon = L.divIcon({ className: '', html: `<div style="width:18px;height:18px;border-radius:50%;background:${color};border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.4);cursor:pointer;"></div>`, iconSize:[18,18], iconAnchor:[9,9] });
+    const marker = L.marker([m.lat, m.lng], { icon }).bindPopup(() => {
+      let h = `<div style="min-width:220px"><div style="font-family:'JetBrains Mono',monospace;font-weight:600;font-size:14px;color:var(--accent);margin-bottom:6px">${m.id}</div><div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">E: ${m.easting.toFixed(2)} &nbsp; N: ${m.northing.toFixed(2)}</div>${m.elevation!=null?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">Elev: ${m.elevation.toFixed(2)}</div>`:''}`;
+      if (m.survey) {
+        const s = m.survey;
+        h += `<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px;font-size:11px;color:var(--text-primary)">`;
+        if (s.rimElev) h += `Rim: ${s.rimElev} `;
+        if (s.condRating) h += `<br>Rating: ${s.condRating} `;
+        if (s.action && s.action !== 'None') h += `<br>Action: ${s.action}`;
+        if (s.pipes && s.pipes.length) {
+          h += `<br>Pipes: ${s.pipes.length}`;
+        }
+        h += `</div>`;
+        // Mini diagram canvas for this manhole's pipes
+        if (s.pipes && s.pipes.length) {
+          const canvasId = 'miniDiagram_' + m.id.replace(/[^a-zA-Z0-9]/g, '_');
+          h += `<canvas id="${canvasId}" width="200" height="200" style="width:200px;height:200px;display:block;margin:8px auto 0;border-radius:8px;background:var(--canvas-bg);"></canvas>`;
+        }
+      }
+      h += `<button type="button" onclick="openSurvey('${m.id}')" style="margin-top:10px;width:100%;padding:7px;border:none;border-radius:6px;background:#f59e0b;color:#000;font-weight:600;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;">${m.survey?'Edit Inspection':'Start Inspection'}</button></div>`;
+      return h;
+    }, { maxWidth: 280 });
+    marker.on('popupopen', () => {
+      selectedId = m.id;
+      renderList();
+      // Draw mini diagram after popup DOM is ready
+      if (m.survey && m.survey.pipes && m.survey.pipes.length) {
+        setTimeout(() => {
+          const canvasId = 'miniDiagram_' + m.id.replace(/[^a-zA-Z0-9]/g, '_');
+          drawMiniPlanView(canvasId, m);
+        }, 50);
+      }
+    });
+    markersGroup.addLayer(marker);
+  });
+  if (manholes.length > 0) { map.fitBounds(L.latLngBounds(manholes.map(m=>[m.lat,m.lng])), { padding:[50,50], maxZoom:17 }); }
+}
+function selectManhole(id) {
+  selectedId = id; renderList();
+  const mh = manholes.find(m => m.id === id);
+  if (mh) { map.setView([mh.lat, mh.lng], Math.max(map.getZoom(), 16)); markersGroup.eachLayer(l => { if (Math.abs(l.getLatLng().lat - mh.lat) < 0.00001) l.openPopup(); }); }
+}
+
+// ================ PIPES ================
+function addPipe(data) {
+  pipes.push(data || { num: pipes.length+1, direction:'', clockPos:'', size:'', material:'', measureDown:'', invertElev:'', condition:'' });
+  renderPipes();
+}
+function removePipe(i) { pipes.splice(i,1); pipes.forEach((p,j) => p.num=j+1); renderPipes(); }
+
+function calcInvert(pipeIdx) {
+  const rim = parseFloat(document.getElementById('fRimElev').value);
+  const md = parseFloat(pipes[pipeIdx].measureDown);
+  if (!isNaN(rim) && !isNaN(md)) {
+    const inv = (rim - md).toFixed(2);
+    pipes[pipeIdx].invertElev = inv;
+  }
+  renderPipes();
+}
+
+function renderPipes() {
+  const c = document.getElementById('pipeContainer');
+  if (!pipes.length) { c.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No pipes added yet.</div>'; return; }
+
+  const rim = parseFloat(document.getElementById('fRimElev').value);
+
+  c.innerHTML = pipes.map((p,i) => {
+    // Auto-calc invert if we have rim and measureDown
+    let invDisplay = p.invertElev || '';
+    if (p.measureDown && !isNaN(parseFloat(p.measureDown)) && !isNaN(rim)) {
+      invDisplay = (rim - parseFloat(p.measureDown)).toFixed(2);
+      pipes[i].invertElev = invDisplay;
+    }
+
+    return `<div class="pipe-entry">
+      <div class="pipe-row">
+        <div class="form-group"><label>#</label><input type="text" value="${p.num}" readonly style="background:var(--bg-primary);text-align:center"></div>
+        <div class="form-group"><label>Dir</label><select onchange="pipes[${i}].direction=this.value"><option value="">—</option><option ${p.direction==='In'?'selected':''}>In</option><option ${p.direction==='Out'?'selected':''}>Out</option></select></div>
+        <div class="form-group"><label>Bearing</label><button type="button" class="clock-btn ${p.clockPos?'has-value':''}" onclick="openClockPicker(${i})">${p.clockPos||'—'}</button></div>
+        <div class="form-group"><label>Size</label><input type="text" value="${p.size}" placeholder='8"' onchange="pipes[${i}].size=this.value"></div>
+        <div class="form-group"><label>Material</label><select onchange="pipes[${i}].material=this.value"><option value="">—</option><option ${p.material==='PVC'?'selected':''}>PVC</option><option ${p.material==='VCP'?'selected':''}>VCP</option><option ${p.material==='DIP'?'selected':''}>DIP</option><option ${p.material==='RCP'?'selected':''}>RCP</option><option ${p.material==='CMP'?'selected':''}>CMP</option><option ${p.material==='HDPE'?'selected':''}>HDPE</option><option ${p.material==='Clay'?'selected':''}>Clay</option><option ${p.material==='Other'?'selected':''}>Other</option></select></div>
+        <div class="form-group"><label>Cond</label><select onchange="pipes[${i}].condition=this.value"><option value="">—</option><option ${p.condition==='Good'?'selected':''}>Good</option><option ${p.condition==='Fair'?'selected':''}>Fair</option><option ${p.condition==='Poor'?'selected':''}>Poor</option><option ${p.condition==='Failed'?'selected':''}>Failed</option></select></div>
+        <button class="pipe-remove" onclick="removePipe(${i})">✕</button>
+      </div>
+      <div class="pipe-row-2">
+        <div class="form-group"><label>Measure Down (ft)</label><input type="number" step="0.01" value="${p.measureDown||''}" placeholder="7.47" onchange="pipes[${i}].measureDown=this.value; calcInvert(${i})"></div>
+        <div class="form-group"><label>Invert Elev ${!isNaN(rim) && p.measureDown ? '(auto)' : ''}</label><input type="number" step="0.01" value="${invDisplay}" placeholder="517.85" onchange="pipes[${i}].invertElev=this.value"></div>
+        <div class="form-group"><label>Calculation</label><div class="inv-calc">${!isNaN(rim) && p.measureDown ? `${rim.toFixed(2)} − ${parseFloat(p.measureDown).toFixed(2)} = ${invDisplay}` : 'Enter rim & measure down'}</div></div>
+      </div>
+    </div>`;
+  }).join('');
+  drawMHDiagram();
+}
+
+// ================ MANHOLE DIAGRAM ================
+const DIR_ANGLES = { N:270, NE:315, E:0, SE:45, S:90, SW:135, W:180, NW:225 };
+const PIPE_COLORS = ['#3b82f6','#ef4444','#22c55e','#f59e0b','#a855f7','#ec4899','#14b8a6','#f97316'];
+
+function drawMiniPlanView(canvasId, mh) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !mh.survey || !mh.survey.pipes) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const scale = W / 200; // scale relative to 200px base
+  ctx.clearRect(0, 0, W, H);
+
+  const cs = getComputedStyle(document.documentElement);
+  const isLight = document.documentElement.classList.contains('light');
+  const textCol = cs.getPropertyValue('--canvas-text').trim();
+  const accentCol = cs.getPropertyValue('--accent').trim();
+  const shaftCol = cs.getPropertyValue('--canvas-shaft-stroke').trim();
+  const mhFillCol = cs.getPropertyValue('--canvas-mh-fill').trim();
+
+  const cx = W / 2, cy = H / 2, r = 45 * scale;
+  const savedPipes = mh.survey.pipes;
+
+  // North arrow
+  ctx.fillStyle = accentCol;
+  ctx.font = `700 ${Math.round(10*scale)}px "JetBrains Mono", monospace`;
+  ctx.textAlign = 'center';
+  ctx.fillText('N', cx, 14 * scale);
+  ctx.beginPath();
+  ctx.moveTo(cx, 17*scale); ctx.lineTo(cx - 3*scale, 22*scale); ctx.lineTo(cx + 3*scale, 22*scale);
+  ctx.closePath(); ctx.fill();
+
+  // Manhole circle
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.strokeStyle = shaftCol;
+  ctx.lineWidth = 2 * scale;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 1, 0, Math.PI * 2);
+  ctx.fillStyle = mhFillCol;
+  ctx.fill();
+
+  // MH ID
+  ctx.fillStyle = textCol;
+  ctx.font = `500 ${Math.round(9*scale)}px "JetBrains Mono", monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(mh.id, cx, cy);
+
+  // Draw each saved pipe
+  savedPipes.forEach((p, i) => {
+    const color = PIPE_COLORS[i % PIPE_COLORS.length];
+    const angleDeg = p.clockPos && DIR_ANGLES[p.clockPos] !== undefined ? DIR_ANGLES[p.clockPos] : null;
+    if (angleDeg === null) return;
+
+    const angleRad = angleDeg * Math.PI / 180;
+    const pipeSize = parseInt(p.size) || 8;
+    const pipeW = Math.max(3*scale, Math.min(12*scale, pipeSize / 4 * scale));
+
+    const x1 = cx + r * Math.cos(angleRad);
+    const y1 = cy + r * Math.sin(angleRad);
+    const x2 = cx + (r + 32*scale) * Math.cos(angleRad);
+    const y2 = cy + (r + 32*scale) * Math.sin(angleRad);
+
+    // Shadow
+    ctx.lineWidth = pipeW + 2*scale;
+    ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.3)';
+    ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+
+    // Pipe
+    ctx.lineWidth = pipeW;
+    ctx.strokeStyle = color;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+
+    // Direction arrow
+    if (p.direction) {
+      const arrowDir = p.direction === 'In' ? -1 : 1;
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      const ax = mx + arrowDir * 6*scale * Math.cos(angleRad);
+      const ay = my + arrowDir * 6*scale * Math.sin(angleRad);
+      const perp = angleRad + Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - arrowDir * 5*scale * Math.cos(angleRad) + 3*scale * Math.cos(perp),
+                 ay - arrowDir * 5*scale * Math.sin(angleRad) + 3*scale * Math.sin(perp));
+      ctx.lineTo(ax - arrowDir * 5*scale * Math.cos(angleRad) - 3*scale * Math.cos(perp),
+                 ay - arrowDir * 5*scale * Math.sin(angleRad) - 3*scale * Math.sin(perp));
+      ctx.closePath();
+      ctx.fillStyle = isLight ? '#000' : '#fff';
+      ctx.fill();
+    }
+
+    // Label
+    const lx = cx + (r + 42*scale) * Math.cos(angleRad);
+    const ly = cy + (r + 42*scale) * Math.sin(angleRad);
+    ctx.fillStyle = color;
+    ctx.font = `600 ${Math.round(8*scale)}px "JetBrains Mono", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`#${p.num} ${p.clockPos}`, lx, ly);
+  });
+}
+
+function drawMHDiagram() {
+  const canvas = document.getElementById('mhDiagramCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // Read theme colors from CSS variables
+  const cs = getComputedStyle(document.documentElement);
+  const COL = {
+    text: cs.getPropertyValue('--canvas-text').trim(),
+    dimText: cs.getPropertyValue('--canvas-dim-text').trim(),
+    shaft: cs.getPropertyValue('--canvas-shaft').trim(),
+    shaftStroke: cs.getPropertyValue('--canvas-shaft-stroke').trim(),
+    mhFill: cs.getPropertyValue('--canvas-mh-fill').trim(),
+    refLine: cs.getPropertyValue('--canvas-ref-line').trim(),
+    accent: cs.getPropertyValue('--accent').trim(),
+    border: cs.getPropertyValue('--border').trim(),
+  };
+  const isLight = document.documentElement.classList.contains('light');
+
+  const rim = parseFloat(document.getElementById('fRimElev')?.value);
+  const mh = surveyingId ? manholes.find(m => m.id === surveyingId) : null;
+
+  // ---- Divider ----
+  const dividerY = H * 0.45;
+  ctx.strokeStyle = COL.refLine;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.moveTo(20, dividerY);
+  ctx.lineTo(W - 20, dividerY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // ==== PLAN VIEW (top portion) ====
+  const planCX = W * 0.5, planCY = dividerY * 0.48, planR = 75;
+
+  // Title
+  ctx.font = '600 11px "DM Sans", sans-serif';
+  ctx.fillStyle = COL.text;
+  ctx.textAlign = 'center';
+  ctx.fillText('PLAN VIEW (Looking Down)', planCX, 20);
+
+  // North arrow
+  ctx.fillStyle = COL.accent;
+  ctx.font = '700 12px "JetBrains Mono", monospace';
+  ctx.fillText('N', planCX, 38);
+  ctx.beginPath();
+  ctx.moveTo(planCX, 42);
+  ctx.lineTo(planCX - 4, 49);
+  ctx.lineTo(planCX + 4, 49);
+  ctx.closePath();
+  ctx.fill();
+
+  // Manhole circle
+  ctx.beginPath();
+  ctx.arc(planCX, planCY, planR, 0, Math.PI * 2);
+  ctx.strokeStyle = COL.shaftStroke;
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(planCX, planCY, planR - 1, 0, Math.PI * 2);
+  ctx.fillStyle = COL.mhFill;
+  ctx.fill();
+
+  // MH ID
+  ctx.fillStyle = COL.text;
+  ctx.font = '500 11px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (mh) ctx.fillText(mh.id, planCX, planCY);
+
+  // Draw pipes in plan view
+  pipes.forEach((p, i) => {
+    const color = PIPE_COLORS[i % PIPE_COLORS.length];
+    const angleDeg = p.clockPos && DIR_ANGLES[p.clockPos] !== undefined ? DIR_ANGLES[p.clockPos] : null;
+    if (angleDeg === null) return;
+
+    const angleRad = angleDeg * Math.PI / 180;
+    const pipeSize = parseInt(p.size) || 8;
+    const pipeW = Math.max(6, Math.min(18, pipeSize / 3));
+
+    const x1 = planCX + planR * Math.cos(angleRad);
+    const y1 = planCY + planR * Math.sin(angleRad);
+    const x2 = planCX + (planR + 50) * Math.cos(angleRad);
+    const y2 = planCY + (planR + 50) * Math.sin(angleRad);
+
+    // Pipe shadow
+    ctx.lineWidth = pipeW + 2;
+    ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.3)';
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+
+    // Pipe body
+    ctx.lineWidth = pipeW;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+
+    // Direction arrow
+    if (p.direction) {
+      const arrowDir = p.direction === 'In' ? -1 : 1;
+      const mx = (x1 + x2) / 2;
+      const my = (y1 + y2) / 2;
+      const ax = mx + arrowDir * 8 * Math.cos(angleRad);
+      const ay = my + arrowDir * 8 * Math.sin(angleRad);
+      const perpAngle = angleRad + Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - arrowDir * 7 * Math.cos(angleRad) + 4 * Math.cos(perpAngle),
+                 ay - arrowDir * 7 * Math.sin(angleRad) + 4 * Math.sin(perpAngle));
+      ctx.lineTo(ax - arrowDir * 7 * Math.cos(angleRad) - 4 * Math.cos(perpAngle),
+                 ay - arrowDir * 7 * Math.sin(angleRad) - 4 * Math.sin(perpAngle));
+      ctx.closePath();
+      ctx.fillStyle = isLight ? '#000' : '#fff';
+      ctx.fill();
+    }
+
+    // Label
+    const lx = planCX + (planR + 65) * Math.cos(angleRad);
+    const ly = planCY + (planR + 65) * Math.sin(angleRad);
+    ctx.fillStyle = color;
+    ctx.font = '600 10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`#${p.num} ${p.clockPos}`, lx, ly);
+    if (p.size) {
+      ctx.font = '400 9px "JetBrains Mono", monospace';
+      ctx.fillStyle = COL.text;
+      ctx.fillText(`${p.size}${p.material ? ' '+p.material : ''}`, lx, ly + 13);
+    }
+  });
+
+  // ==== PROFILE VIEW (bottom portion) ====
+  const profTop = dividerY + 12;
+
+  ctx.font = '600 11px "DM Sans", sans-serif';
+  ctx.fillStyle = COL.text;
+  ctx.textAlign = 'center';
+  ctx.fillText('PROFILE VIEW (Cross Section)', W / 2, profTop + 8);
+
+  // Elevation range
+  let elevMax = rim || 0;
+  let elevMin = elevMax;
+  pipes.forEach(p => {
+    const inv = parseFloat(p.invertElev);
+    if (!isNaN(inv)) elevMin = Math.min(elevMin, inv);
+  });
+  if (elevMin >= elevMax) elevMin = elevMax - 10;
+  const elevRange = elevMax - elevMin;
+
+  const profMarginL = 90, profMarginR = 50;
+  const profDrawTop = profTop + 30;
+  const profDrawBottom = H - 30;
+  const profH = profDrawBottom - profDrawTop;
+
+  function elevToY(elev) {
+    if (!elevRange) return profDrawBottom;
+    return profDrawTop + (1 - (elev - elevMin) / elevRange) * profH;
+  }
+
+  // Ground / rim line
+  const rimY = elevToY(elevMax);
+  ctx.strokeStyle = COL.shaftStroke;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath();
+  ctx.moveTo(profMarginL - 30, rimY);
+  ctx.lineTo(W - profMarginR + 15, rimY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Rim label
+  ctx.fillStyle = COL.text;
+  ctx.font = '400 10px "JetBrains Mono", monospace';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  if (!isNaN(rim)) ctx.fillText(`Rim ${rim.toFixed(2)}`, profMarginL - 34, rimY);
+
+  // Manhole shaft
+  const shaftCX = W / 2;
+  const shaftW = 56;
+  const shaftBottom = pipes.length ? Math.min(...pipes.map(p => {
+    const inv = parseFloat(p.invertElev);
+    return isNaN(inv) ? elevMax : inv;
+  })) : elevMax - 8;
+  const shaftBottomY = elevToY(shaftBottom - 1.5);
+
+  ctx.fillStyle = COL.shaft;
+  ctx.fillRect(shaftCX - shaftW / 2, rimY, shaftW, shaftBottomY - rimY);
+  ctx.strokeStyle = COL.shaftStroke;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(shaftCX - shaftW / 2, rimY, shaftW, shaftBottomY - rimY);
+
+  // Rim cap
+  ctx.fillStyle = COL.shaftStroke;
+  ctx.fillRect(shaftCX - shaftW / 2 - 8, rimY - 5, shaftW + 16, 5);
+
+  // Draw pipes in profile
+  pipes.forEach((p, i) => {
+    const color = PIPE_COLORS[i % PIPE_COLORS.length];
+    const inv = parseFloat(p.invertElev);
+    if (isNaN(inv)) return;
+
+    const pipeY = elevToY(inv);
+    const pipeSize = parseInt(p.size) || 8;
+    const pipePx = Math.max(7, Math.min(22, pipeSize / 2.2));
+    const isLeft = i % 2 === 0;
+    const pipeStartX = isLeft ? profMarginL : shaftCX + shaftW / 2;
+    const pipeEndX = isLeft ? shaftCX - shaftW / 2 : W - profMarginR;
+
+    // Pipe fill
+    ctx.fillStyle = color;
+    ctx.globalAlpha = isLight ? 0.15 : 0.2;
+    ctx.fillRect(pipeStartX, pipeY - pipePx / 2, pipeEndX - pipeStartX, pipePx);
+    ctx.globalAlpha = 1;
+
+    // Pipe outline
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(pipeStartX, pipeY - pipePx / 2);
+    ctx.lineTo(pipeEndX, pipeY - pipePx / 2);
+    ctx.moveTo(pipeStartX, pipeY + pipePx / 2);
+    ctx.lineTo(pipeEndX, pipeY + pipePx / 2);
+    ctx.stroke();
+
+    // Invert elev reference line
+    ctx.setLineDash([2, 2]);
+    ctx.strokeStyle = COL.refLine;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(profMarginL - 30, pipeY);
+    ctx.lineTo(W - profMarginR + 15, pipeY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Elevation label
+    ctx.fillStyle = color;
+    ctx.font = '500 10px "JetBrains Mono", monospace';
+    ctx.textAlign = isLeft ? 'right' : 'left';
+    ctx.textBaseline = 'middle';
+    const labelX = isLeft ? profMarginL - 34 : W - profMarginR + 20;
+    ctx.fillText(inv.toFixed(2), labelX, pipeY);
+
+    // Pipe info label
+    const pipeLabelX = isLeft ? pipeStartX + 10 : pipeEndX - 10;
+    ctx.textAlign = isLeft ? 'left' : 'right';
+    ctx.fillStyle = COL.dimText;
+    ctx.font = '600 9px "JetBrains Mono", monospace';
+    ctx.fillText(`#${p.num} ${p.direction||''} ${p.size||''}${p.material ? ' '+p.material : ''}`, pipeLabelX, pipeY - pipePx / 2 - 9);
+
+    // Measure down dimension line
+    if (p.measureDown && !isNaN(rim)) {
+      const dimX = isLeft
+        ? shaftCX - shaftW / 2 - 16 - i * 14
+        : shaftCX + shaftW / 2 + 16 + Math.max(0, i - 1) * 14;
+      if (dimX > profMarginL - 25 && dimX < W - profMarginR + 10) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(dimX, rimY);
+        ctx.lineTo(dimX, pipeY);
+        ctx.stroke();
+        // Ticks
+        ctx.beginPath();
+        ctx.moveTo(dimX - 3, rimY);
+        ctx.lineTo(dimX + 3, rimY);
+        ctx.moveTo(dimX - 3, pipeY);
+        ctx.lineTo(dimX + 3, pipeY);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        // Dimension value
+        ctx.fillStyle = color;
+        ctx.font = '500 9px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${parseFloat(p.measureDown).toFixed(1)}'`, dimX, (rimY + pipeY) / 2);
+      }
+    }
+  });
+
+  // Empty state
+  if (!pipes.length) {
+    ctx.fillStyle = COL.text;
+    ctx.font = '400 13px "DM Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Add pipes to generate diagram', W / 2, profTop + profH / 2 + 20);
+  }
+}
+
+// ================ SURVEY ================
+let surveyingId = null;
+const FIELDS = ['fLocation','fTraffic','fCoverShape','fCoverDiam','fCoverMaterial','fCoverCond','fRimElev','fStructRating','fCondRating','fAction','fNotes'];
+const FIELD_KEYS = ['location','traffic','coverShape','coverDiam','coverMaterial','coverCond','rimElev','structRating','condRating','action','notes'];
+
+function openSurvey(id) {
+  surveyingId = id;
+  const mh = manholes.find(m => m.id === id);
+  if (!mh) return;
+  document.getElementById('surveyTitle').textContent = `Inspection — ${mh.id}`;
+  document.getElementById('surveyModal').style.display = 'flex';
+  const s = mh.survey || {};
+  FIELDS.forEach((fId, i) => { document.getElementById(fId).value = s[FIELD_KEYS[i]] || ''; });
+  // Auto-fill rim elevation from imported manhole elevation
+  if (mh.elevation != null) {
+    document.getElementById('fRimElev').value = mh.elevation;
+  }
+  pipes = s.pipes ? JSON.parse(JSON.stringify(s.pipes)) : [];
+  renderPipes();
+  document.getElementById('clearSurveyBtn').style.display = mh.survey ? 'block' : 'none';
+  map.closePopup();
+}
+function closeSurvey() { document.getElementById('surveyModal').style.display = 'none'; surveyingId = null; }
+function saveSurvey() {
+  const mh = manholes.find(m => m.id === surveyingId);
+  if (!mh) return;
+  const s = {};
+  FIELDS.forEach((fId, i) => { s[FIELD_KEYS[i]] = document.getElementById(fId).value; });
+  s.pipes = JSON.parse(JSON.stringify(pipes));
+  s.timestamp = new Date().toISOString();
+  mh.survey = s;
+  save(); renderAll(); closeSurvey();
+}
+function clearSurvey() {
+  if (!confirm('Clear inspection data for this manhole?')) return;
+  const mh = manholes.find(m => m.id === surveyingId);
+  if (mh) { mh.survey = null; save(); renderAll(); closeSurvey(); }
+}
+
+// ================ EXPORT ================
+function exportData() {
+  if (!manholes.length) { alert('No data to export.'); return; }
+  const rows = manholes.map(m => {
+    const s = m.survey || {};
+    const row = { ID: m.id, Easting: m.easting, Northing: m.northing, Elevation: m.elevation||'', Latitude: m.lat.toFixed(8), Longitude: m.lng.toFixed(8), Zone: m.zone, Status: m.survey?'Surveyed':'Pending' };
+    FIELD_KEYS.forEach(k => { row[k] = s[k] || ''; });
+    // Flatten pipes
+    for (let i = 0; i < 6; i++) {
+      const p = (s.pipes||[])[i] || {};
+      row[`pipe${i+1}_direction`] = p.direction||'';
+      row[`pipe${i+1}_clockPos`] = p.clockPos||'';
+      row[`pipe${i+1}_size`] = p.size||'';
+      row[`pipe${i+1}_material`] = p.material||'';
+      row[`pipe${i+1}_measureDown`] = p.measureDown||'';
+      row[`pipe${i+1}_invertElev`] = p.invertElev||'';
+      row[`pipe${i+1}_condition`] = p.condition||'';
+    }
+    row.timestamp = s.timestamp||'';
+    return row;
+  });
+  const csv = Papa.unparse(rows);
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const projName = (projects[currentProjectId]?.name || 'project').replace(/[^a-zA-Z0-9]/g, '_');
+  a.href = url; a.download = `${projName}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+// ================ COMPASS DIRECTION PICKER ================
+let clockPipeIdx = null;
+let clockSelected = null;
+let deviceHeading = null;        // degrees from magnetic north (0-360)
+let compassSupported = false;
+let orientationHandler = null;
+let compassAnimFrame = null;
+let smoothHeading = 0;
+
+const COMPASS_DIRS = [
+  { label: 'N',  angle: 0 },
+  { label: 'NE', angle: 45 },
+  { label: 'E',  angle: 90 },
+  { label: 'SE', angle: 135 },
+  { label: 'S',  angle: 180 },
+  { label: 'SW', angle: 225 },
+  { label: 'W',  angle: 270 },
+  { label: 'NW', angle: 315 },
+];
+
+function startCompass() {
+  // iOS 13+ requires permission request
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission().then(state => {
+      if (state === 'granted') {
+        attachOrientationListener();
+      } else {
+        showCompassStatus('Permission denied — compass inactive', false);
+      }
+    }).catch(() => {
+      showCompassStatus('Compass not available on this device', false);
+    });
+  } else if ('ondeviceorientationabsolute' in window) {
+    // Android with absolute orientation
+    orientationHandler = function(e) {
+      if (e.alpha !== null) {
+        deviceHeading = e.alpha;
+        compassSupported = true;
+      }
+    };
+    window.addEventListener('deviceorientationabsolute', orientationHandler, true);
+    showCompassStatus('Compass active — rotate device to orient', true);
+    startCompassAnimation();
+  } else if ('ondeviceorientation' in window) {
+    attachOrientationListener();
+  } else {
+    showCompassStatus('Compass not available — select direction manually', false);
+  }
+}
+
+function attachOrientationListener() {
+  orientationHandler = function(e) {
+    let heading = null;
+    if (e.webkitCompassHeading !== undefined) {
+      // iOS: webkitCompassHeading is degrees from north (0=N, 90=E)
+      heading = e.webkitCompassHeading;
+    } else if (e.alpha !== null) {
+      // Android/others: alpha is degrees from an arbitrary reference
+      // For absolute orientation, 360 - alpha gives compass heading
+      heading = (360 - e.alpha) % 360;
+    }
+    if (heading !== null) {
+      deviceHeading = heading;
+      compassSupported = true;
+    }
+  };
+  window.addEventListener('deviceorientation', orientationHandler, true);
+  showCompassStatus('Compass active — rotate device to orient', true);
+  startCompassAnimation();
+}
+
+function startCompassAnimation() {
+  function animate() {
+    if (deviceHeading !== null) {
+      // Smooth the heading to avoid jitter
+      let diff = deviceHeading - smoothHeading;
+      // Handle wraparound
+      if (diff > 180) diff -= 360;
+      if (diff < -180) diff += 360;
+      smoothHeading = (smoothHeading + diff * 0.15 + 360) % 360;
+
+      // Rotate the entire compass face so N points to real north
+      const face = document.getElementById('compassFaceRotator');
+      if (face) {
+        face.style.transform = `rotate(${-smoothHeading}deg)`;
+      }
+      // Update heading readout
+      const readout = document.getElementById('compassReadout');
+      if (readout) {
+        const nearest = getClosestDirection(smoothHeading);
+        readout.textContent = `${Math.round(smoothHeading)}° ${nearest}`;
+      }
+      // Show status as active
+      const statusDot = document.getElementById('compassStatusDot');
+      if (statusDot) statusDot.style.background = '#22c55e';
+    }
+    compassAnimFrame = requestAnimationFrame(animate);
+  }
+  animate();
+}
+
+function stopCompass() {
+  if (orientationHandler) {
+    window.removeEventListener('deviceorientation', orientationHandler, true);
+    window.removeEventListener('deviceorientationabsolute', orientationHandler, true);
+    orientationHandler = null;
+  }
+  if (compassAnimFrame) {
+    cancelAnimationFrame(compassAnimFrame);
+    compassAnimFrame = null;
+  }
+  deviceHeading = null;
+  compassSupported = false;
+}
+
+function getClosestDirection(heading) {
+  const dirs = ['N','NE','E','SE','S','SW','W','NW'];
+  const idx = Math.round(heading / 45) % 8;
+  return dirs[idx];
+}
+
+function showCompassStatus(msg, active) {
+  const el = document.getElementById('compassStatus');
+  if (el) {
+    el.querySelector('.status-text').textContent = msg;
+    el.querySelector('.status-dot').style.background = active ? '#22c55e' : '#565c73';
+  }
+}
+
+function openClockPicker(pipeIdx) {
+  clockPipeIdx = pipeIdx;
+  clockSelected = pipes[pipeIdx].clockPos || null;
+
+  let html = `<div class="clock-overlay" id="clockOverlay" onclick="if(event.target===this)closeClockPicker()">
+    <div class="clock-picker">
+      <h3>Select Pipe Direction</h3>
+      <div id="compassStatus" class="compass-status">
+        <span class="status-dot" id="compassStatusDot"></span>
+        <span class="status-text">Detecting compass…</span>
+      </div>
+      <div class="compass-heading-readout" id="compassReadout">—</div>
+      <div class="clock-face">
+        <div id="compassFaceRotator" class="compass-face-rotator">
+          <div class="center-dot"></div>
+          <div class="hand" id="clockHand"></div>
+          <div class="compass-n">▲ N</div>`;
+
+  COMPASS_DIRS.forEach(d => {
+    const rad = (d.angle - 90) * Math.PI / 180;
+    const radius = 82;
+    const cx = 110 + radius * Math.cos(rad);
+    const cy = 110 + radius * Math.sin(rad);
+    const sel = clockSelected === d.label ? 'selected' : '';
+    html += `<button type="button" class="hour-btn ${sel}" data-dir="${d.label}"
+      style="left:${cx}px;top:${cy}px"
+      onclick="selectClockHour('${d.label}', ${d.angle})">${d.label}</button>`;
+  });
+
+  html += `</div></div>
+      <div class="clock-actions">
+        <button type="button" class="btn" onclick="clearClockPicker()">Clear</button>
+        <button type="button" class="btn btn-accent" onclick="confirmClockPicker()">Confirm</button>
+      </div>
+    </div>
+  </div>`;
+
+  const container = document.createElement('div');
+  container.id = 'clockPickerContainer';
+  container.innerHTML = html;
+  document.body.appendChild(container);
+
+  if (clockSelected) {
+    const match = COMPASS_DIRS.find(d => d.label === clockSelected);
+    if (match) updateClockHand(match.angle);
+  }
+
+  // Start device compass
+  smoothHeading = deviceHeading || 0;
+  startCompass();
+}
+
+function selectClockHour(dir, angle) {
+  clockSelected = dir;
+  document.querySelectorAll('.compass-face-rotator .hour-btn').forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset.dir === dir);
+  });
+  updateClockHand(angle);
+}
+
+function updateClockHand(angle) {
+  const hand = document.getElementById('clockHand');
+  if (!hand) return;
+  hand.style.height = '66px';
+  hand.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+  hand.classList.add('visible');
+}
+
+function clearClockPicker() {
+  if (clockPipeIdx !== null) {
+    pipes[clockPipeIdx].clockPos = '';
+  }
+  closeClockPicker();
+  renderPipes();
+}
+
+function confirmClockPicker() {
+  if (clockPipeIdx !== null && clockSelected) {
+    pipes[clockPipeIdx].clockPos = clockSelected;
+  }
+  closeClockPicker();
+  renderPipes();
+}
+
+function closeClockPicker() {
+  stopCompass();
+  const el = document.getElementById('clockPickerContainer');
+  if (el) el.remove();
+  clockPipeIdx = null;
+  clockSelected = null;
+}
+
+// ================ THEME ================
+function toggleTheme() {
+  const root = document.documentElement;
+  const isLight = root.classList.toggle('light');
+  document.getElementById('themeToggle').textContent = isLight ? '🌙' : '☀️';
+  localStorage.setItem('mh_theme', isLight ? 'light' : 'dark');
+  drawMHDiagram();
+}
+
+function loadTheme() {
+  const saved = localStorage.getItem('mh_theme');
+  if (saved === 'light') {
+    document.documentElement.classList.add('light');
+    document.getElementById('themeToggle').textContent = '🌙';
+  }
+}
+
+// ================ SYNC ================
+// Auto-detect: if served from the server, use same origin. Otherwise use saved URL.
+let SYNC_SERVER = localStorage.getItem('mh_sync_url') || '';
+let syncInterval = null;
+let isSyncing = false;
+
+function autoDetectServer() {
+  // If we're served from the Railway/Express server, the API is on the same origin
+  if (!SYNC_SERVER && window.location.protocol.startsWith('http') && !window.location.hostname.includes('github.io')) {
+    const testUrl = window.location.origin;
+    fetch(testUrl + '/api/health', { signal: AbortSignal.timeout(3000) })
+      .then(r => r.json())
+      .then(data => {
+        if (data.status === 'ok') {
+          SYNC_SERVER = testUrl;
+          localStorage.setItem('mh_sync_url', testUrl);
+          console.log('Auto-detected sync server:', testUrl);
+          startAutoSync();
+        }
+      })
+      .catch(() => {}); // Not served from our server, that's fine
+  }
+}
+
+function setSyncStatus(status) {
+  // status: 'off', 'synced', 'syncing', 'error', 'offline'
+  const el = document.getElementById('syncStatus');
+  const btn = document.getElementById('syncBtn');
+  const icons = { off:'⚫', synced:'🟢', syncing:'🟡', error:'🔴', offline:'🔴' };
+  const titles = { off:'No server configured', synced:'Synced with server', syncing:'Syncing...', error:'Sync error', offline:'Server offline' };
+  el.textContent = icons[status] || '⚫';
+  el.title = titles[status] || '';
+  if (status === 'syncing') {
+    btn.classList.add('syncing');
+  } else {
+    btn.classList.remove('syncing');
+  }
+}
+
+async function syncWithServer() {
+  if (!SYNC_SERVER || isSyncing) return;
+  isSyncing = true;
+  setSyncStatus('syncing');
+
+  try {
+    // Save current project state before syncing
+    if (currentProjectId && projects[currentProjectId]) {
+      projects[currentProjectId].manholes = manholes;
+    }
+
+    const resp = await fetch(SYNC_SERVER + '/api/sync-all', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projects })
+    });
+
+    if (!resp.ok) throw new Error('Server returned ' + resp.status);
+
+    const data = await resp.json();
+    if (data.ok && data.projects) {
+      // Merge server state back
+      projects = data.projects;
+      saveProjects();
+
+      // Refresh current project's manholes reference
+      if (projects[currentProjectId]) {
+        manholes = projects[currentProjectId].manholes;
+      } else {
+        // Current project was deleted on server, switch to first
+        currentProjectId = Object.keys(projects)[0];
+        manholes = projects[currentProjectId]?.manholes || [];
+        localStorage.setItem('mh_active_project', currentProjectId);
+      }
+
+      renderProjectSelect();
+      renderAll();
+      setSyncStatus('synced');
+    } else {
+      throw new Error('Invalid server response');
+    }
+  } catch (e) {
+    console.warn('Sync failed:', e.message);
+    if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError')) {
+      setSyncStatus('offline');
+    } else {
+      setSyncStatus('error');
+    }
+  } finally {
+    isSyncing = false;
+  }
+}
+
+function manualSync() {
+  if (!SYNC_SERVER) {
+    openProjectManager();
+    return;
+  }
+  syncWithServer();
+}
+
+function startAutoSync() {
+  stopAutoSync();
+  if (!SYNC_SERVER) { setSyncStatus('off'); return; }
+  // Sync immediately, then every 30 seconds
+  syncWithServer();
+  syncInterval = setInterval(syncWithServer, 30000);
+}
+
+function stopAutoSync() {
+  if (syncInterval) { clearInterval(syncInterval); syncInterval = null; }
+}
+
+async function saveSyncUrl() {
+  const input = document.getElementById('syncServerUrl');
+  const result = document.getElementById('syncTestResult');
+  let url = input.value.trim().replace(/\/+$/, ''); // remove trailing slashes
+
+  if (!url) {
+    SYNC_SERVER = '';
+    localStorage.removeItem('mh_sync_url');
+    stopAutoSync();
+    setSyncStatus('off');
+    result.innerHTML = '<span style="color:var(--text-muted)">Sync disabled — data stored locally only.</span>';
+    return;
+  }
+
+  result.innerHTML = '<span style="color:var(--accent)">Testing connection...</span>';
+
+  try {
+    const resp = await fetch(url + '/api/health', { signal: AbortSignal.timeout(5000) });
+    const data = await resp.json();
+    if (data.status === 'ok') {
+      SYNC_SERVER = url;
+      localStorage.setItem('mh_sync_url', url);
+      result.innerHTML = `<span style="color:var(--success)">✓ Connected! Server has ${data.projects} projects, ${data.manholes} manholes.</span>`;
+      startAutoSync();
+    } else {
+      throw new Error('Unexpected response');
+    }
+  } catch (e) {
+    result.innerHTML = `<span style="color:var(--danger)">✕ Could not connect: ${e.message}. Check URL and ensure server is running.</span>`;
+  }
+}
+
+// Load saved sync URL into the manager input when opened
+const origOpenPM = openProjectManager;
+openProjectManager = function() {
+  origOpenPM();
+  document.getElementById('syncServerUrl').value = SYNC_SERVER;
+};
+
+loadTheme();
+init();
+autoDetectServer();
+startAutoSync();
+</script>
+</body>
+</html>
