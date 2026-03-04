@@ -805,10 +805,12 @@ function loadProjects() {
       } catch(e) {}
     }
   }
+  // No auto-create — if no projects, leave empty and show welcome
   if (!Object.keys(projects).length) {
-    const id = genId();
-    projects[id] = { name:'My Project', manholes:[], created:new Date().toISOString() };
-    saveProjects();
+    currentProjectId = null;
+    manholes = [];
+    renderProjectSelect();
+    return;
   }
   const last = localStorage.getItem('mh_active_project');
   currentProjectId = (last && projects[last]) ? last : Object.keys(projects)[0];
@@ -828,7 +830,14 @@ function save() {
 function renderProjectSelect() {
   const sel = document.getElementById('projectSelect');
   sel.innerHTML = '';
-  Object.keys(projects).forEach(id => {
+  const ids = Object.keys(projects);
+  if (!ids.length) {
+    const o = document.createElement('option');
+    o.value = ''; o.textContent = '— No projects — Create one to get started';
+    sel.appendChild(o);
+    return;
+  }
+  ids.forEach(id => {
     const o = document.createElement('option');
     o.value = id; o.textContent = projects[id].name;
     if (id === currentProjectId) o.selected = true;
@@ -837,7 +846,7 @@ function renderProjectSelect() {
 }
 
 function switchProject(id) {
-  if (!projects[id]) return;
+  if (!id || !projects[id]) return;
   if (currentProjectId && projects[currentProjectId]) projects[currentProjectId].manholes = manholes;
   currentProjectId = id;
   manholes = projects[id].manholes;
@@ -991,6 +1000,7 @@ function updateZoneInfo() {
 
 // ================ IMPORT ================
 function openImport() {
+  if (!currentProjectId) { alert('Create a project first before importing manholes.'); return; }
   document.getElementById('importModal').style.display = 'flex';
   csvData = null; csvHeaders = [];
   document.getElementById('mappingSection').style.display = 'none';
@@ -1067,6 +1077,10 @@ function updateStats() {
 function renderList() {
   const c = document.getElementById('sidebarList');
   const q = document.getElementById('searchInput').value.toLowerCase();
+  if (!currentProjectId) {
+    c.innerHTML = `<div class="empty-state"><div class="icon">📁</div><h3>No Project Selected</h3><p>Create a new project to start collecting survey data</p><button type="button" class="btn btn-accent" onclick="promptNewProject()">+ New Project</button></div>`;
+    return;
+  }
   if (!manholes.length) { c.innerHTML = `<div class="empty-state"><div class="icon">🕳️</div><h3>No Manholes Yet</h3><p>Import a CSV file with manhole locations to get started</p><button type="button" class="btn btn-accent" onclick="openImport()">⬆ Import CSV</button></div>`; return; }
   const filtered = manholes.filter(m => m.id.toLowerCase().includes(q));
   c.innerHTML = filtered.map(m => {
@@ -1946,29 +1960,37 @@ async function syncWithServer() {
       projects[currentProjectId].manholes = manholes;
     }
 
+    // Only send projects that actually exist locally
+    const hasProjects = Object.keys(projects).length > 0;
+
     const resp = await fetch(SYNC_SERVER + '/api/sync-all', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projects })
+      body: JSON.stringify({ projects: hasProjects ? projects : {} })
     });
 
     if (!resp.ok) throw new Error('Server returned ' + resp.status);
 
     const data = await resp.json();
     if (data.ok && data.projects) {
-      // Merge server state back
-      projects = data.projects;
-      saveProjects();
+      const serverIds = Object.keys(data.projects);
 
-      // Refresh current project's manholes reference
-      if (projects[currentProjectId]) {
-        manholes = projects[currentProjectId].manholes;
-      } else {
-        // Current project was deleted on server, switch to first
-        currentProjectId = Object.keys(projects)[0];
-        manholes = projects[currentProjectId]?.manholes || [];
-        localStorage.setItem('mh_active_project', currentProjectId);
+      // Only update if server has projects
+      if (serverIds.length) {
+        projects = data.projects;
+        saveProjects();
+
+        // Refresh current project reference
+        if (currentProjectId && projects[currentProjectId]) {
+          manholes = projects[currentProjectId].manholes;
+        } else {
+          // Current project gone or never set — switch to first from server
+          currentProjectId = serverIds[0];
+          manholes = projects[currentProjectId]?.manholes || [];
+          localStorage.setItem('mh_active_project', currentProjectId);
+        }
       }
+      // If server has no projects and we have none, just stay empty
 
       renderProjectSelect();
       renderAll();
