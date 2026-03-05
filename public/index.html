@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>MH Survey — Manhole Field Collection</title>
@@ -89,6 +89,7 @@
   }
 
   /* Mobile responsive */
+  /* ===== MOBILE: Tablets (768px) ===== */
   @media (max-width: 768px) {
     .main-layout { flex-direction: column; }
     .sidebar { width: 100%; max-height: 35vh; border-right: none; border-bottom: 1px solid var(--border); }
@@ -104,6 +105,122 @@
     .pipe-row { grid-template-columns: 30px 52px 46px 48px 72px 60px 26px; gap: 3px; }
     .pipe-row-2 { grid-template-columns: 1fr 1fr; }
     .pipe-row-2 .form-group:last-child { grid-column: 1 / -1; }
+  }
+
+  /* ===== MOBILE: iPhone / small phones (480px) ===== */
+  @media (max-width: 480px) {
+    /* Topbar — compact single row */
+    .topbar { height: 48px; padding: 0 10px; }
+    .topbar-brand .icon { width: 28px; height: 28px; font-size: 12px; border-radius: 6px; }
+    .topbar-brand h1 { font-size: 14px; }
+    .topbar-brand span { display: none; }
+    .topbar-actions { gap: 3px; }
+    .topbar-actions .badge { display: none; }
+    .btn { padding: 6px 8px; font-size: 11px; gap: 3px; border-radius: 6px; }
+    #syncBtn { padding: 6px 6px; font-size: 11px; }
+    #syncBtn .btn-text { display: none; }
+    #syncStatus { font-size: 12px; }
+    .theme-toggle { width: 32px; height: 32px; font-size: 14px; border-radius: 6px; }
+
+    /* Project bar — tighter */
+    .project-bar { padding: 5px 10px; gap: 6px; }
+    .project-bar label { display: none; }
+    .project-bar select { font-size: 12px; padding: 6px 8px; }
+    .project-bar .btn-sm { padding: 5px 8px; font-size: 10px; }
+
+    /* Layout — map on top, list below */
+    .main-layout { flex-direction: column-reverse; }
+    .sidebar {
+      width: 100%; max-height: 40vh; min-height: 30vh;
+      border-right: none; border-top: 1px solid var(--border); border-bottom: none;
+    }
+    .map-container { flex: 1; min-height: 35vh; }
+    .sidebar-header { padding: 10px; }
+    .sidebar-header input { padding: 8px 10px; font-size: 14px; }
+    .stats-bar { gap: 10px; padding: 8px 10px; }
+    .mh-item { padding: 8px 10px; }
+    .mh-item .name { font-size: 13px; }
+
+    /* Modals — full screen on iPhone */
+    .overlay { align-items: flex-end; }
+    .modal {
+      width: 100%; max-width: 100%;
+      max-height: 92vh;
+      border-radius: 16px 16px 0 0;
+      border-bottom: none;
+      animation: slideUpMobile 0.25s ease-out;
+    }
+    @keyframes slideUpMobile {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+    .modal-header { padding: 16px; }
+    .modal-header h2 { font-size: 16px; }
+    .modal-body { padding: 16px; }
+    .modal-footer { padding: 12px 16px; }
+
+    /* Form fields — larger touch targets */
+    .form-group input, .form-group select, .form-group textarea {
+      padding: 12px; font-size: 16px; /* 16px prevents iOS zoom on focus */
+    }
+    .form-group label { font-size: 11px; }
+    .form-row { grid-template-columns: 1fr; gap: 0; }
+    .form-row-3 { grid-template-columns: 1fr; gap: 0; }
+
+    /* Pipe rows — wrap into flowing layout on phone */
+    .pipe-entry { padding: 10px; }
+    .pipe-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .pipe-row .form-group { flex: 0 0 auto; min-width: 0; }
+    .pipe-row .form-group:nth-child(1) { flex-basis: 32px; }  /* # */
+    .pipe-row .form-group:nth-child(2) { flex-basis: 55px; }  /* Dir */
+    .pipe-row .form-group:nth-child(3) { flex-basis: 55px; }  /* Bearing */
+    .pipe-row .form-group:nth-child(4) { flex-basis: 55px; }  /* Size */
+    .pipe-row .form-group:nth-child(5) { flex: 1 1 80px; }    /* Material */
+    .pipe-row .form-group:nth-child(6) { flex: 1 1 65px; }    /* Condition */
+    .pipe-row .pipe-remove { align-self: flex-end; flex-shrink: 0; }
+    .pipe-row-2 { grid-template-columns: 1fr 1fr; }
+    .pipe-row-2 .form-group:last-child { grid-column: 1 / -1; }
+
+    /* Pipe entry — larger touch */
+    .pipe-entry input, .pipe-entry select { padding: 8px 6px !important; font-size: 14px !important; }
+    .pipe-entry label { font-size: 10px !important; }
+    .pipe-remove { width: 28px; height: 28px; }
+    .clock-btn { padding: 8px 6px !important; font-size: 14px !important; }
+
+    /* Import dropzone */
+    .import-dropzone { padding: 24px 16px; }
+    .import-dropzone .icon { font-size: 28px; }
+    .mapping-row { flex-direction: column; gap: 4px; }
+    .mapping-row span { width: auto; }
+
+    /* Diagram */
+    #mhDiagramWrap { padding: 8px; }
+
+    /* Compass picker — larger */
+    .clock-picker { width: 290px; padding: 20px; }
+    .clock-face { width: 240px; height: 240px; }
+
+    /* Empty state */
+    .empty-state { padding: 24px 16px; }
+    .empty-state .icon { font-size: 36px; }
+    .empty-state h3 { font-size: 16px; }
+    .empty-state p { font-size: 13px; }
+
+    /* Project manager */
+    .project-list-item { padding: 10px; flex-wrap: wrap; }
+    .project-list-item .pname { font-size: 13px; }
+    .sync-config { flex-direction: column; }
+    .sync-config input { min-width: unset; width: 100%; }
+  }
+
+  /* ===== Safe area insets for iPhone notch/Dynamic Island ===== */
+  @supports (padding-top: env(safe-area-inset-top)) {
+    .topbar { padding-top: env(safe-area-inset-top); }
+    .modal-footer { padding-bottom: env(safe-area-inset-bottom); }
   }
   body {
     font-family: 'DM Sans', sans-serif;
